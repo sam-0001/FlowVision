@@ -80,11 +80,24 @@ def _fields(config: SimulationConfig, output_dir: Path, progress: Callable[[int,
     U0 = float(config.inlet_velocity)
     Re = float(config.reynolds_number)
     nu = (U0 * dia) / max(Re, 1.0)
-    omega = min(1.9, 2.0 / (6.0 * nu + 1.0))
+    omega_base = 2.0 / (6.0 * nu + 1.0)
     
     pr = float(config.prandtl_number)
     alpha = nu / max(pr, 0.01)
-    omega_t = min(1.9, 2.0 / (6.0 * alpha + 1.0))
+    omega_t_base = 2.0 / (6.0 * alpha + 1.0)
+    
+    # Sponge zone at the outlet to prevent acoustic wave reflections that cause NaN blowups
+    sponge_length = 20
+    omega_arr = np.full(lx, omega_base)
+    omega_t_arr = np.full(lx, omega_t_base)
+    for i in range(sponge_length):
+        dist = i / sponge_length
+        # Smoothly transition omega down to 1.0 at the outlet
+        omega_arr[-(i+1)] = 1.0 + (omega_base - 1.0) * (dist ** 2)
+        omega_t_arr[-(i+1)] = 1.0 + (omega_t_base - 1.0) * (dist ** 2)
+        
+    omega = omega_arr[None, :]
+    omega_t = omega_t_arr[None, :]
     
     w = np.array([4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36], dtype=np.float64)
     cx = np.array([0, 1, 0, -1, 0, 1, -1, -1, 1], dtype=int)
