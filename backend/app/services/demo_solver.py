@@ -229,10 +229,10 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         dat_path = output_dir / "flow_temperature.dat"
         with dat_path.open("w", newline="") as handle:
             handle.write('VARIABLES = "X", "Y", "VX", "VY", "PRESS", "TEMP", "VORTICITY", "OBST"\n')
-            handle.write(f"ZONE I={xx.shape[1]}, J={xx.shape[0]}, F=POINT\\n")
+            handle.write(f"ZONE I={xx.shape[1]}, J={xx.shape[0]}, F=POINT\n")
             for row in range(xx.shape[0]):
                 for col in range(xx.shape[1]):
-                    handle.write(f"{xx[row,col]:.6f} {yy[row,col]:.6f} {u[row,col]:.8f} {v[row,col]:.8f} {pressure[row,col]:.8f} {temperature[row,col]:.8f} {vorticity[row,col]:.8f} {int(obstacle[row,col])}\\n")
+                    handle.write(f"{xx[row,col]:.6f} {yy[row,col]:.6f} {u[row,col]:.8f} {v[row,col]:.8f} {pressure[row,col]:.8f} {temperature[row,col]:.8f} {vorticity[row,col]:.8f} {int(obstacle[row,col])}\n")
 
         progress(60, "Rendering paper-style contours")
         projection = "-".join(axis.upper() for axis in config.active_axes[:2])
@@ -324,13 +324,13 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         progress(50, "Writing full 3D simulation data")
         dat_path = output_dir / "flow_temperature_3d.dat"
         with dat_path.open("w", newline="") as handle:
-            handle.write('VARIABLES = "X", "Y", "Z", "VX", "VY", "VZ", "TEMP"\\n')
-            handle.write(f"ZONE I={xxx.shape[0]}, J={xxx.shape[1]}, K={xxx.shape[2]}, F=POINT\\n")
+            handle.write('VARIABLES = "X", "Y", "Z", "VX", "VY", "VZ", "TEMP"\n')
+            handle.write(f"ZONE I={xxx.shape[0]}, J={xxx.shape[1]}, K={xxx.shape[2]}, F=POINT\n")
             # Downsample write for speed in this demo
             s_x, s_y, s_z = xxx[::2,::2,::2], yyy[::2,::2,::2], zzz[::2,::2,::2]
             su, sv, sw, st = u[::2,::2,::2], v[::2,::2,::2], w[::2,::2,::2], temp3d[::2,::2,::2]
             for idx in range(s_x.size):
-                handle.write(f"{s_x.flat[idx]:.3f} {s_y.flat[idx]:.3f} {s_z.flat[idx]:.3f} {su.flat[idx]:.4f} {sv.flat[idx]:.4f} {sw.flat[idx]:.4f} {st.flat[idx]:.4f}\\n")
+                handle.write(f"{s_x.flat[idx]:.3f} {s_y.flat[idx]:.3f} {s_z.flat[idx]:.3f} {su.flat[idx]:.4f} {sv.flat[idx]:.4f} {sw.flat[idx]:.4f} {st.flat[idx]:.4f}\n")
                 
         # Generate 2D slices for visualization
         progress(70, "Rendering 3D slices")
