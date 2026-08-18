@@ -80,11 +80,11 @@ def _fields(config: SimulationConfig, output_dir: Path, progress: Callable[[int,
     U0 = float(config.inlet_velocity)
     Re = float(config.reynolds_number)
     nu = (U0 * dia) / max(Re, 1.0)
-    omega = 2.0 / (6.0 * nu + 1.0)
+    omega = min(1.9, 2.0 / (6.0 * nu + 1.0))
     
     pr = float(config.prandtl_number)
     alpha = nu / max(pr, 0.01)
-    omega_t = 2.0 / (6.0 * alpha + 1.0)
+    omega_t = min(1.9, 2.0 / (6.0 * alpha + 1.0))
     
     w = np.array([4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36], dtype=np.float64)
     cx = np.array([0, 1, 0, -1, 0, 1, -1, -1, 1], dtype=int)
