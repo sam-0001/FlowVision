@@ -43,7 +43,7 @@ def _geometry(config: SimulationConfig):
     return xx, yy, centers_x, centers_y
 
 
-def _fields(config: SimulationConfig, output_dir: Path):
+def _fields(config: SimulationConfig, output_dir: Path, progress: Callable[[int, str], None] = None):
     import numpy as np
     
     dia = int(config.cylinder_diameter)
@@ -117,6 +117,9 @@ def _fields(config: SimulationConfig, output_dir: Path):
     T_in = float(config.inlet_temperature)
     
     for t in range(time_steps):
+        if t % 500 == 0 and progress:
+            progress(25 + int(20 * t / time_steps), f"LBM step {t}/{time_steps}")
+            
         rho = np.sum(f, axis=0)
         u = np.sum(f * cx[:, None, None], axis=0) / rho
         v = np.sum(f * cy[:, None, None], axis=0) / rho
@@ -215,7 +218,7 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
     is_3d = config.cylinders_z > 0
     
     if not is_3d:
-        xx, yy, u, v, pressure, temperature, vorticity, obstacle, centers_x, centers_y = _fields(config, output_dir)
+        xx, yy, u, v, pressure, temperature, vorticity, obstacle, centers_x, centers_y = _fields(config, output_dir, progress)
         
         metadata = {
             "mode": "lbm",
