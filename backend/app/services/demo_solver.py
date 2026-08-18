@@ -266,6 +266,28 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         w = np.zeros_like(xxx)
         temp3d = np.full_like(xxx, config.inlet_temperature)
         
+        # Add some 3D plumes so plots are not blank!
+        y_count = config.cylinders_y if config.cylinders_y > 0 else 1
+        z_count = config.cylinders_z if config.cylinders_z > 0 else 1
+        
+        y_start = height / 2 - (y_count - 1) * (1 + sd) / 2
+        z_start = depth / 2 - (z_count - 1) * (1 + sd) / 2
+        
+        for i in range(horizontal_count):
+            for j in range(y_count):
+                for k in range(z_count):
+                    cx = 7 + 0.5 + i * (1 + sd)
+                    cy = y_start + j * (1 + sd)
+                    cz = z_start + k * (1 + sd)
+                    
+                    dx = xxx - cx
+                    dy = yyy - cy
+                    dz = zzz - cz
+                    
+                    # Narrower 3D thermal plume trailing behind the cylinder
+                    thermal = np.where(dx > -0.5, np.exp(-((dx - 1.0)**2 / 4 + dy**2 / 0.15 + dz**2 / 0.15)), 0)
+                    temp3d += (config.cylinder_temperature - config.inlet_temperature) * thermal
+        
         # Output true 3D data as Tecplot
         progress(50, "Writing full 3D simulation data")
         dat_path = output_dir / "flow_temperature_3d.dat"
@@ -295,7 +317,7 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         
         # Empty placeholder for streamline plot
         fig, ax = plt.subplots(figsize=(5, 3))
-        ax.text(0.5, 0.5, "3D Streamlines\\navailable in ParaView", ha='center', va='center')
+        ax.text(0.5, 0.5, "3D Streamlines\navailable in ParaView", ha='center', va='center')
         ax.axis('off')
         fig.savefig(output_dir / "velocity_streamlines.png", dpi=180)
         plt.close(fig)
