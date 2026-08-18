@@ -17,7 +17,7 @@ const initialConfig: Config = {
 const plotNames: Record<string, string> = {
   "temperature_contour.png": "Temperature field", "pressure_contour.png": "Pressure field",
   "vorticity_contour.png": "Vorticity and wake", "velocity_streamlines.png": "Velocity streamlines",
-  "force_history.png": "Lift and drag history",
+  "vortex_tracking_map.png": "Vortex Tracking Map", "force_history.png": "Lift and drag history",
 };
 
 function App() {

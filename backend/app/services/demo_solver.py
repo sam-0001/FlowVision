@@ -250,6 +250,32 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         ax.set_title("Velocity streamlines (demo)")
         fig.savefig(output_dir / "velocity_streamlines.png", dpi=180)
         plt.close(fig)
+        
+        # Generate Vortex Tracking Map simulating the academic paper style
+        progress(90, "Generating vortex tracking map")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        for cx, cy in zip(centers_x, centers_y):
+            # Draw cylinder as a thick square box
+            box = plt.Rectangle((cx - 0.5, cy - 0.5), 1.0, 1.0, fill=False, edgecolor='black', linewidth=3.5)
+            ax.add_patch(box)
+            
+            # Simulate historical vortex core trajectories (black diamonds)
+            num_points = 8
+            track_x = np.linspace(cx + 1.5, cx + 15.0, num_points)
+            # Make the vortices alternate up and down like a von Karman street
+            offsets = np.array([0.5, -0.5] * (num_points // 2 + 1))[:num_points]
+            track_y = cy + offsets
+            ax.plot(track_x, track_y, 'kD', markersize=4)
+
+        ax.set_xlim(np.min(xx), np.max(xx))
+        ax.set_ylim(np.min(yy), np.max(yy))
+        ax.set_xlabel("x/d", fontweight='bold', fontsize=12)
+        ax.set_ylabel("y/d", fontweight='bold', fontsize=12)
+        # Bold Re number title on bottom left mimicking the paper
+        ax.text(0.01, -0.15, f"(a) Re = {config.reynolds_number}", transform=ax.transAxes, fontweight='bold', fontsize=12, va='top')
+        
+        fig.savefig(output_dir / "vortex_tracking_map.png", dpi=180, bbox_inches='tight')
+        plt.close(fig)
     else:
         progress(30, "Generating true 3D volumetric fields")
         # Generate 3D synthetic fields
