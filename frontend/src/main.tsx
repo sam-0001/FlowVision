@@ -187,9 +187,14 @@ function App() {
             <article className="panel results"><div className="panel-heading"><div><p className="eyebrow">03 / RESULTS</p><h2>Visual output</h2></div>{activeRun?.status === "completed" && <><button type="button" className="link-button" onClick={() => {
               const filename = activeRun.config.cylinders_z > 0 ? "flow_temperature_3d.dat" : "flow_temperature.dat";
               fetch(`/api/runs/${activeRun.id}/analyze`, { method: "POST" })
-                .then(r => r.json())
+                .then(r => {
+                  if (!r.ok) {
+                    return r.json().then(err => { throw new Error(err.detail || "Server error"); }).catch(e => { throw new Error(e.message || "Server error"); });
+                  }
+                  return r.json();
+                })
                 .then(data => { setAnalysisResult(data); setMode("analyze"); })
-                .catch(e => alert("Analysis error: " + e));
+                .catch(e => alert("Analysis error: " + e.message + "\n\nIf this is an old run, please generate a new one to apply recent fixes."));
             }} style={{marginRight: "15px"}}>Analyze Run</button><a className="download" href={`/api/runs/${activeRun.id}/artifacts/${activeRun.config.cylinders_z > 0 ? "flow_temperature_3d.dat" : "flow_temperature.dat"}`}>Download .dat</a></>}</div>{activeRun?.status === "completed" ? <div className="gallery">{activeRun.artifact_names.filter(name => name.endsWith(".png")).map(name => <figure key={name}><img src={`/api/runs/${activeRun.id}/artifacts/${name}`} alt={plotNames[name] || name}/><figcaption>{plotNames[name] || name}<a href={`/api/runs/${activeRun.id}/artifacts/${name}`} target="_blank">Open</a></figcaption></figure>)}</div> : <div className="visual-placeholder"><div className="contour"></div><p>Temperature, pressure, vorticity, streamlines, and force figures will appear here.</p></div>}</article>
             {runs.length > 0 && <article className="recent"><p className="eyebrow">RECENT RUNS</p>{runs.slice(0, 3).map(run => <button type="button" key={run.id} onClick={() => setActiveRun(run)}><span className={`dot ${run.status}`}/><b>{run.id}</b><span>{run.config.cylinders_x}×{run.config.cylinders_y}×{run.config.cylinders_z} · Re {run.config.reynolds_number}</span><em>{run.status}</em></button>)}</article>}
           </>
