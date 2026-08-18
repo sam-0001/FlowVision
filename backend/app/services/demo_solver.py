@@ -92,9 +92,10 @@ def _fields(config: SimulationConfig, output_dir: Path):
     opp = [0, 3, 4, 1, 2, 7, 8, 5, 6]
     
     rho = np.ones((ly, lx), dtype=np.float64)
-    u = np.full((ly, lx), U0, dtype=np.float64)
+    # MUST initialize fluid at rest (u=0) to prevent acoustic shockwave instability!
+    u = np.zeros((ly, lx), dtype=np.float64)
     v = np.zeros((ly, lx), dtype=np.float64)
-    temp = np.full((ly, lx), config.inlet_temperature, dtype=np.float64)
+    temp = np.zeros((ly, lx), dtype=np.float64) # Initialize temp to 0
     
     f = np.zeros((9, ly, lx), dtype=np.float64)
     g = np.zeros((9, ly, lx), dtype=np.float64)
@@ -111,7 +112,7 @@ def _fields(config: SimulationConfig, output_dir: Path):
     for i in range(9):
         g[i] = w[i] * temp * (1.0 + 3.0*(cx[i]*u + cy[i]*v))
         
-    time_steps = min(config.time_steps, 2000)
+    time_steps = min(config.time_steps, 15000)
     T_cyl = float(config.cylinder_temperature)
     T_in = float(config.inlet_temperature)
     
