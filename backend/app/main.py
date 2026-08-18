@@ -107,3 +107,38 @@ def run_vortex_analysis_endpoint(temp_id: str):
         return analyze_vortices(temp_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/runs/{run_id}/analyze")
+def analyze_run(run_id: str):
+    import uuid
+    from app.services.run_manager import get_artifact_path
+    
+    # Determine if this was a 3D or 2D run by checking which artifact exists
+    dat_path = get_artifact_path(run_id, "flow_temperature_3d.dat")
+    if not dat_path:
+        dat_path = get_artifact_path(run_id, "flow_temperature.dat")
+    
+    if not dat_path:
+        raise HTTPException(status_code=404, detail="Dat file not found in run")
+        
+    temp_id = str(uuid.uuid4())
+    temp_dir = Path(f"runs/temp_{temp_id}")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_path = temp_dir / dat_path.name
+    shutil.copy(dat_path, file_path)
+        
+    parsed = parse_dat_file(file_path)
+    preview_image = temp_dir / "preview.png"
+    plot_var = generate_preview(parsed, preview_image)
+    
+    return {
+        "id": temp_id,
+        "filename": dat_path.name,
+        "variables": parsed["variables"],
+        "zones_count": len(parsed["zones"]),
+        "i": parsed["zones"][0].get("i", 0),
+        "j": parsed["zones"][0].get("j", 0),
+        "preview_url": f"/api/analysis/{temp_id}/preview.png",
+        "plotted_variable": plot_var
+    }
