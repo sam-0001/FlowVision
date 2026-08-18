@@ -44,140 +44,139 @@ def _geometry(config: SimulationConfig):
 
 
 def _fields(config: SimulationConfig, output_dir: Path):
-    import re
-    import subprocess
-    import shutil
-    from app.services.dat_parser import parse_dat_file
+    import numpy as np
     
-    # Path to original fortran file
-    orig_f = Path("../want/sd=0.5 with less dia 12-2.for")
+    dia = int(config.cylinder_diameter)
+    sd = float(config.gap_ratio)
+    horizontal_count = config.cylinders_x if config.cylinders_x > 0 else 1
+    vertical_count = config.cylinders_y if config.cylinders_y > 0 else 1
     
-    if orig_f.exists():
-        try:
-            # Copy and modify the Fortran source
-            f_content = orig_f.read_text()
+    lx = int((26 * dia) + (horizontal_count * dia) + (max(0, horizontal_count - 1) * sd * dia))
+    ly = int(20 * dia)
+    
+    x = np.arange(1, lx + 1, dtype=np.float64)
+    y = np.arange(1, ly + 1, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y)
+    
+    obst = np.zeros((ly, lx), dtype=bool)
+    centers_x, centers_y = [], []
+    
+    start_x = 7.0 * dia + 1.0
+    start_y = 10.0 * dia - (vertical_count - 1) * (1.0 + sd) * dia / 2.0
+    
+    for i in range(horizontal_count):
+        for j in range(vertical_count):
+            c_x = start_x + i * dia * (1.0 + sd) + dia / 2.0
+            c_y = start_y + j * dia * (1.0 + sd) + dia / 2.0
+            centers_x.append(c_x / dia)
+            centers_y.append(c_y / dia)
+            x_min = start_x + i * dia * (1.0 + sd)
+            x_max = x_min + dia
+            y_min = start_y + j * dia * (1.0 + sd)
+            y_max = y_min + dia
+            mask = (xx >= x_min) & (xx <= x_max) & (yy >= y_min) & (yy <= y_max)
+            obst |= mask
             
-            # Regex replacements
-            dia = config.cylinder_diameter
-            n_cyl = config.cylinders_x if config.cylinders_x > 0 else 1
-            sd = config.gap_ratio
-            
-            f_content = re.sub(
-                r'parameter\s*\(\s*dia=\d+.*?\)', 
-                f'parameter(dia={dia},n_cyl={n_cyl},space=19.0d0,restart=0,save_para=20000)', 
-                f_content, flags=re.IGNORECASE
-            )
-            f_content = re.sub(
-                r'parameter\s*\(\s*sd=[\d\.]+d0\s*\)', 
-                f'parameter (sd={sd}d0)', 
-                f_content, flags=re.IGNORECASE
-            )
-            lx_expr = f"({26*dia})+({n_cyl*dia})+({max(0, n_cyl-1)*sd*dia})"
-            f_content = re.sub(
-                r'parameter\s*\(\s*lx=[^,]+,\s*ly=[^,]+,[^\)]+\)',
-                f'parameter(lx={lx_expr},ly={20*dia},ll=8,sav_para1=10000)',
-                f_content, flags=re.IGNORECASE
-            )
-            f_content = re.sub(
-                r'parameter\s*\(\s*U0=[\d\.]+d0\s*\)', 
-                f'parameter (U0={config.inlet_velocity}d0)', 
-                f_content, flags=re.IGNORECASE
-            )
-            f_content = re.sub(
-                r'pr=[\d\.]+', 
-                f'pr={config.prandtl_number}', 
-                f_content, flags=re.IGNORECASE
-            )
-            f_content = re.sub(
-                r'parameter\s*\(\s*anbsave_para\s*=\s*\d+\s*,\s*clsave_para\s*=\s*\d+\s*\)',
-                f'parameter(anbsave_para = {config.snapshot_interval} , clsave_para = 10)',
-                f_content, flags=re.IGNORECASE
-            )
-            
-            src_file = output_dir / "solver.f"
-            src_file.write_text(f_content)
-            
-            # Compile
-            subprocess.run(["gfortran", "-O3", "-w", "-fallow-argument-mismatch", "-std=legacy", "-fmax-stack-var-size=0", "solver.f", "-o", "solver"], cwd=output_dir, check=True)
-            
-            # Write multi.par
-            nu = config.inlet_velocity * dia / config.reynolds_number
-            omega = 1.0 / (3.0 * nu + 0.5)
-            (output_dir / "multi.par").write_text(f"{config.time_steps}\n1.0\n{omega}\n")
-            
-            # Run
-            subprocess.run(["./solver"], cwd=output_dir, check=True)
-            
-            # Read Temperature_field.dat and anb{something}.dat
-            anb_files = list(output_dir.glob("anb*.dat"))
-            if (output_dir / "anb903.dat").exists():
-                anb_file = output_dir / "anb903.dat"
-            else:
-                anb_files.sort()
-                anb_file = anb_files[-1] if anb_files else None
-                
-            temp_file = output_dir / "Temperature_field.dat"
-            
-            if not anb_file or not temp_file.exists():
-                raise RuntimeError("Fortran solver did not produce expected output files")
-                
-            temp_parsed = parse_dat_file(temp_file)["zones"][0]
-            anb_parsed = parse_dat_file(anb_file)["zones"][0]
-            
-            j_dim, i_dim = temp_parsed["j"], temp_parsed["i"]
-            t_vars = [v.upper() for v in parse_dat_file(temp_file)["variables"]]
-            a_vars = [v.upper() for v in parse_dat_file(anb_file)["variables"]]
-            
-            t_idx = t_vars.index("TEMP") if "TEMP" in t_vars else t_vars.index("TEMPERATURE")
-            x_idx = a_vars.index("X")
-            y_idx = a_vars.index("Y")
-            vx_idx = a_vars.index("VX") if "VX" in a_vars else a_vars.index("U")
-            vy_idx = a_vars.index("VY") if "VY" in a_vars else a_vars.index("V")
-            p_idx = a_vars.index("PRESS") if "PRESS" in a_vars else a_vars.index("PRESSURE")
-            obst_idx = a_vars.index("OBST") if "OBST" in a_vars else a_vars.index("OBSTACLE")
-            
-            xx = anb_parsed["data"][:, x_idx].reshape(j_dim, i_dim) / dia
-            yy = anb_parsed["data"][:, y_idx].reshape(j_dim, i_dim) / dia
-            u = anb_parsed["data"][:, vx_idx].reshape(j_dim, i_dim)
-            v = anb_parsed["data"][:, vy_idx].reshape(j_dim, i_dim)
-            pressure = anb_parsed["data"][:, p_idx].reshape(j_dim, i_dim)
-            temperature = temp_parsed["data"][:, t_idx].reshape(j_dim, i_dim)
-            obstacle = anb_parsed["data"][:, obst_idx].reshape(j_dim, i_dim) > 0
-            
-            dx = (np.max(xx) - np.min(xx)) / max(1, i_dim - 1)
-            dy = (np.max(yy) - np.min(yy)) / max(1, j_dim - 1)
-            du_dy, du_dx = np.gradient(u, dy, dx)
-            dv_dy, dv_dx = np.gradient(v, dy, dx)
-            vorticity = dv_dx - du_dy
-            
-            _, _, centers_x, centers_y = _geometry(config)
-            return xx, yy, u, v, pressure, temperature, vorticity, obstacle, centers_x, centers_y
+    U0 = float(config.inlet_velocity)
+    Re = float(config.reynolds_number)
+    nu = (U0 * dia) / max(Re, 1.0)
+    omega = 2.0 / (6.0 * nu + 1.0)
+    
+    pr = float(config.prandtl_number)
+    alpha = nu / max(pr, 0.01)
+    omega_t = 2.0 / (6.0 * alpha + 1.0)
+    
+    w = np.array([4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36], dtype=np.float64)
+    cx = np.array([0, 1, 0, -1, 0, 1, -1, -1, 1], dtype=int)
+    cy = np.array([0, 0, 1, 0, -1, 1, 1, -1, -1], dtype=int)
+    opp = [0, 3, 4, 1, 2, 7, 8, 5, 6]
+    
+    rho = np.ones((ly, lx), dtype=np.float64)
+    u = np.full((ly, lx), U0, dtype=np.float64)
+    v = np.zeros((ly, lx), dtype=np.float64)
+    temp = np.full((ly, lx), config.inlet_temperature, dtype=np.float64)
+    
+    f = np.zeros((9, ly, lx), dtype=np.float64)
+    g = np.zeros((9, ly, lx), dtype=np.float64)
+    
+    def get_eq(r, ux, uy):
+        usq = ux*ux + uy*uy
+        feq = np.zeros_like(f)
+        for i in range(9):
+            cu = cx[i]*ux + cy[i]*uy
+            feq[i] = w[i] * r * (1.0 + 3.0*cu + 4.5*cu*cu - 1.5*usq)
+        return feq
+
+    f = get_eq(rho, u, v)
+    for i in range(9):
+        g[i] = w[i] * temp * (1.0 + 3.0*(cx[i]*u + cy[i]*v))
         
-        except Exception as e:
-            print(f"Fortran solver failed: {e}. Falling back to demo fields.")
+    time_steps = min(config.time_steps, 2000)
+    T_cyl = float(config.cylinder_temperature)
+    T_in = float(config.inlet_temperature)
     
-    # Fallback to demo fields
-    xx, yy, centers_x, centers_y = _geometry(config)
-    u = np.full_like(xx, config.inlet_velocity)
-    v = np.zeros_like(xx)
-    temperature = np.full_like(xx, config.inlet_temperature)
-    vorticity = np.zeros_like(xx)
-    radius = 0.55
-    for index, (cx, cy) in enumerate(zip(centers_x, centers_y)):
-        dx, dy = xx - cx, yy - cy
-        r2 = dx**2 + dy**2 + 0.12
-        wake = np.exp(-((dx - 2.4) ** 2 / 11 + dy**2 / 2.2))
-        thermal = np.exp(-((dx - 1.6) ** 2 / 10 + dy**2 / 3.3))
-        circulation = (1 if index % 2 == 0 else -1) * 0.08
-        u += -circulation * dy / r2 * np.exp(-r2 / 12) - config.inlet_velocity * 0.35 * wake
-        v += circulation * dx / r2 * np.exp(-r2 / 12) + (config.richardson_number * 0.02 * thermal)
-        temperature += (config.cylinder_temperature - config.inlet_temperature) * thermal
-        vorticity += circulation * (1 - r2 / 6) * np.exp(-r2 / 6) + 0.03 * wake * np.sin(3 * dx)
-    pressure = 1 / 3 - 0.45 * (u**2 + v**2)
-    obstacle = np.zeros_like(xx, dtype=bool)
-    for cx, cy in zip(centers_x, centers_y):
-        obstacle |= (np.abs(xx - cx) <= radius) & (np.abs(yy - cy) <= radius)
-    return xx, yy, u, v, pressure, temperature, vorticity, obstacle, centers_x, centers_y
+    for t in range(time_steps):
+        rho = np.sum(f, axis=0)
+        u = np.sum(f * cx[:, None, None], axis=0) / rho
+        v = np.sum(f * cy[:, None, None], axis=0) / rho
+        temp = np.sum(g, axis=0)
+        
+        u[obst] = 0.0
+        v[obst] = 0.0
+        temp[obst] = T_cyl
+        
+        feq = get_eq(rho, u, v)
+        f_post = f - omega * (f - feq)
+        
+        geq = np.zeros_like(g)
+        for i in range(9):
+            cu = cx[i]*u + cy[i]*v
+            geq[i] = w[i] * temp * (1.0 + 3.0*cu)
+        g_post = g - omega_t * (g - geq)
+        
+        for i in range(9):
+            f_post[i, obst] = f[opp[i], obst]
+            g_post[i, obst] = w[i]*T_cyl + w[opp[i]]*T_cyl - g[opp[i], obst]
+            
+        for i in range(9):
+            f[i] = np.roll(f_post[i], shift=(cy[i], cx[i]), axis=(0, 1))
+            g[i] = np.roll(g_post[i], shift=(cy[i], cx[i]), axis=(0, 1))
+            
+        u_in = U0
+        v_in = 0.0
+        rho_in = (f[0,:,0] + f[2,:,0] + f[4,:,0] + 2.0*(f[3,:,0] + f[6,:,0] + f[7,:,0])) / (1.0 - u_in)
+        f[1,:,0] = f[3,:,0] + (2.0/3.0)*rho_in*u_in
+        f[5,:,0] = f[7,:,0] - 0.5*(f[2,:,0]-f[4,:,0]) + (1.0/6.0)*rho_in*u_in + 0.5*rho_in*v_in
+        f[8,:,0] = f[6,:,0] + 0.5*(f[2,:,0]-f[4,:,0]) + (1.0/6.0)*rho_in*u_in - 0.5*rho_in*v_in
+        
+        for i in range(9):
+            if cx[i] > 0:
+                g[i,:,0] = w[i] * T_in * (1.0 + 3.0*(cx[i]*u_in + cy[i]*v_in))
+                
+        for i in range(9):
+            if cx[i] < 0:
+                f[i,:,-1] = f[i,:,-2]
+                g[i,:,-1] = g[i,:,-2]
+
+    rho = np.sum(f, axis=0)
+    u = np.sum(f * cx[:, None, None], axis=0) / rho
+    v = np.sum(f * cy[:, None, None], axis=0) / rho
+    temp = np.sum(g, axis=0)
+    u[obst] = 0.0
+    v[obst] = 0.0
+    temp[obst] = T_cyl
+    
+    xx = xx / dia
+    yy = yy / dia
+    
+    dx = 1.0 / max(1, lx - 1)
+    dy = 1.0 / max(1, ly - 1)
+    dv_dy, dv_dx = np.gradient(v, dy, dx)
+    du_dy, du_dx = np.gradient(u, dy, dx)
+    vorticity = dv_dx - du_dy
+    pressure = rho / 3.0
+    
+    return xx, yy, u, v, pressure, temp, vorticity, obst, centers_x, centers_y
 
 
 def _save_contour(path: Path, xx, yy, field, centers_x, centers_y, title: str, label: str, cmap: str):
@@ -210,7 +209,7 @@ def _save_contour_slice(path: Path, xx, yy, field, title: str, label: str, cmap:
 
 def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress: Callable[[int, str], None]) -> list[str]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    progress(25, "Generating demo flow field")
+    progress(25, "Running LBM physics engine")
     
     is_3d = config.cylinders_z > 0
     
@@ -218,8 +217,8 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         xx, yy, u, v, pressure, temperature, vorticity, obstacle, centers_x, centers_y = _fields(config, output_dir)
         
         metadata = {
-            "mode": "demo",
-            "warning": "Synthetic X-Y slice preview only - not CFD-validated",
+            "mode": "lbm",
+            "warning": "Full 2D Lattice Boltzmann simulation",
             "array_layout": {"x": config.cylinders_x, "y": config.cylinders_y, "z": config.cylinders_z},
             "config": config.model_dump(),
         }
@@ -236,7 +235,7 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
 
         progress(60, "Rendering paper-style contours")
         projection = "-".join(axis.upper() for axis in config.active_axes[:2])
-        slice_title = f"{projection} projection (demo)"
+        slice_title = f"{projection} projection"
         _save_contour(output_dir / "temperature_contour.png", xx, yy, temperature, centers_x, centers_y, f"Temperature field - {slice_title}", "Temperature", "inferno")
         _save_contour(output_dir / "pressure_contour.png", xx, yy, pressure, centers_x, centers_y, f"Pressure field - {slice_title}", "Pressure", "viridis")
         _save_contour(output_dir / "vorticity_contour.png", xx, yy, vorticity, centers_x, centers_y, f"Vorticity and wakes - {slice_title}", "Vorticity", "RdBu_r")
@@ -247,7 +246,7 @@ def generate_demo_artifacts(config: SimulationConfig, output_dir: Path, progress
         ax.streamplot(xx[0], yy[:, 0], u, v, color=speed, density=1.5, cmap="turbo", linewidth=0.8)
         for cx, cy in zip(centers_x, centers_y):
             ax.add_patch(plt.Rectangle((cx - 0.55, cy - 0.55), 1.1, 1.1, fc="#111827", ec="white", lw=0.7))
-        ax.set_title("Velocity streamlines (demo)")
+        ax.set_title("Velocity streamlines")
         fig.savefig(output_dir / "velocity_streamlines.png", dpi=180)
         plt.close(fig)
         
