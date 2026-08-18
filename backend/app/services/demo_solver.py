@@ -161,11 +161,14 @@ def _fields(config: SimulationConfig, output_dir: Path, progress: Callable[[int,
             
         u_in = U0
         v_in = 0.0
-        rho_in = (f[0,:,0] + f[2,:,0] + f[4,:,0] + 2.0*(f[3,:,0] + f[6,:,0] + f[7,:,0])) / (1.0 - u_in)
-        f[1,:,0] = f[3,:,0] + (2.0/3.0)*rho_in*u_in
-        f[5,:,0] = f[7,:,0] - 0.5*(f[2,:,0]-f[4,:,0]) + (1.0/6.0)*rho_in*u_in + 0.5*rho_in*v_in
-        f[8,:,0] = f[6,:,0] + 0.5*(f[2,:,0]-f[4,:,0]) + (1.0/6.0)*rho_in*u_in - 0.5*rho_in*v_in
+        rho_in = np.sum(f[:, :, 0], axis=0)
         
+        # Equilibrium inlet (much more stable than Zou-He at Re=100)
+        usq = u_in*u_in + v_in*v_in
+        for i in range(9):
+            cu = cx[i]*u_in + cy[i]*v_in
+            f[i, :, 0] = w[i] * rho_in * (1.0 + 3.0*cu + 4.5*cu*cu - 1.5*usq)
+            
         for i in range(9):
             if cx[i] > 0:
                 g[i,:,0] = w[i] * T_in * (1.0 + 3.0*(cx[i]*u_in + cy[i]*v_in))
