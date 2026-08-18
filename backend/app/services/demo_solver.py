@@ -20,19 +20,25 @@ from app.models import SimulationConfig
 
 
 def _geometry(config: SimulationConfig):
-    """Return an X-Y slice of the configured 3D cylinder array."""
+    """Return an X-Y slice of the configured 2D cylinder array."""
     horizontal_count = config.cylinders_x if config.cylinders_x > 0 else 1
-    vertical_count = 1  # 2D solver always uses 1 vertical cylinder
+    vertical_count = config.cylinders_y if config.cylinders_y > 0 else 1
     dia = config.cylinder_diameter
     sd = config.gap_ratio
     width = 26 + horizontal_count + max(0, horizontal_count - 1) * sd
     height = 20
+    
+    # Calculate spacing
+    y_start = 10.0 - (vertical_count - 1) * (1 + sd) / 2
+    
     x = np.linspace(0, width, int(width * dia))
     y = np.linspace(0, height, int(height * dia))
     xx, yy = np.meshgrid(x, y)
-    x_positions = 7 + 0.5 + np.arange(horizontal_count) * (1 + sd)
-    y_positions = np.full(horizontal_count, 10.0)
-    centers_x, centers_y = np.meshgrid(x_positions, y_positions)
+    
+    x_pos = 7 + 0.5 + np.arange(horizontal_count) * (1 + sd)
+    y_pos = y_start + np.arange(vertical_count) * (1 + sd)
+    
+    centers_x, centers_y = np.meshgrid(x_pos, y_pos)
     centers_x, centers_y = centers_x.ravel(), centers_y.ravel()
     return xx, yy, centers_x, centers_y
 

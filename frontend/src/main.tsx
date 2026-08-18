@@ -10,7 +10,7 @@ type Config = {
 type Run = { id: string; status: "queued" | "running" | "completed" | "failed"; progress: number; config: Config; created_at: string; message?: string; artifact_names: string[] };
 
 const initialConfig: Config = {
-  cylinders_x: 3, cylinders_y: 4, cylinders_z: 3, cylinder_diameter: 12, gap_ratio: 0.5, reynolds_number: 100,
+  cylinders_x: 3, cylinders_y: 4, cylinders_z: 0, cylinder_diameter: 12, gap_ratio: 0.5, reynolds_number: 100,
   prandtl_number: 0.71, richardson_number: 0.0, inlet_temperature: 0, cylinder_temperature: 1, inlet_velocity: 0.05,
   time_steps: 10000, snapshot_interval: 500, include_temperature: true, include_pressure: true,
 };
